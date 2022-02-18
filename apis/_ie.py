@@ -200,7 +200,8 @@ class IWebBrowser2(object):
         # res = self.ie_object._IWebBrowser__com__get_Document(comtypes.POINTER(doc))
         # if res==comtypes.hresult.S_OK:
         #     return doc
-        # return None      
+        # return None    
+        ...  
 
 
 
