@@ -256,38 +256,11 @@ class IWebBrowser2(object):
     # def getElementsByTagName(self,tag_name:str):
     #     return self.iHtmlDocument.getElementsByTagName(tag_name)
 
-class IHtmlDocumentInterface(object):
-
-    def __init__(self,iHtmlDocument=None) -> None:
-        self.__iHtmlDocument=iHtmlDocument
-
-    @classmethod
-    def from_ie_browser(cls,ie_browser)->"IHtmlDocumentInterface":
-        return cls(iHtmlDocument=ie_browser.iHtmlDocument)
-
-    def query_selector(self,select_str:str,many=False):
-        if not many:
-            return self.__iHtmlDocument.querySelector(select_str)
-        return self.__iHtmlDocument.querySelectorAll(select_str)
-
-    def get_element_by_id(self,id:str):
-        return self.__iHtmlDocument.getElementById(id)
-
-    def get_elements_by_name(self,name:str):
-        return self.__iHtmlDocument.getElementsByName(name)
-
-    def getElementsByTagName(self,tag_name:str):
-        return self.__iHtmlDocument.getElementsByTagName(tag_name)
-
-    def __getattribute__(self, __name: str):
-        print(__name)
-        return super().__getattribute__(__name)
-
 
 class IHTMLElement(object):
     
     def __init__(self,_IHTMLElement) -> None:
-        self.___IHTMLElement = _IHTMLElement # todo support list
+        self.__IHTMLElement = _IHTMLElement # todo support list
 
     def get_text(self,include_tag = False):
         """
@@ -296,9 +269,9 @@ class IHTMLElement(object):
 
         text = comtypes.automation.BSTR()
         if not include_tag: 
-            res = self.___IHTMLElement._IHTMLElement__com__get_innerText(ctypes.byref(text))
+            res = self.__IHTMLElement._IHTMLElement__com__get_innerText(ctypes.byref(text))
         else:
-            res = self.___IHTMLElement._IHTMLElement__com__get_outerHTML(ctypes.byref(text))
+            res = self.__IHTMLElement._IHTMLElement__com__get_outerHTML(ctypes.byref(text))
         if res == comtypes.hresult.S_OK:
             return text.value
         else:
@@ -310,24 +283,29 @@ class IHTMLElement(object):
         """ 
         text = comtypes.automation.BSTR()
         text.value = value
-        res = self.___IHTMLElement._IHTMLElement__com__set_innerText(text)
+        res = self.__IHTMLElement._IHTMLElement__com__set_innerText(text)
         if res == comtypes.hresult.S_OK:
             return True
         else:
             return False
 
     def click(self):
-        return self.___IHTMLElement.click()
+        return self.__IHTMLElement.click()
 
     
     def get_attr(self,attr_name,flag = 0):
         attr = comtypes.automation.BSTR()
         attr.value  = attr_name
-        flag = comtypes.automation.LONG()
-        flag.value = flag
-        res = self.___IHTMLElement._IHTMLElement__com_getAttribute(attr,flag)
-        return res
-
+        _flag = comtypes.automation.LONG()
+        _flag.vt = comtypes.automation.VT_I4
+        _flag.value = flag
+        value = comtypes.automation.VARIANT()
+        value.vt = comtypes.automation.VT_BSTR
+        res = self.__IHTMLElement._IHTMLElement__com_getAttribute(attr,_flag,ctypes.byref(value))
+        if res == comtypes.hresult.S_OK:
+            return value.value
+        else:
+            return ""
     
     def set_attr(self,attr_name,value,flag =1)->bool:
         """
@@ -340,11 +318,40 @@ class IHTMLElement(object):
         value = comtypes.automation.VARIANT(value)
         flag = comtypes.automation.LONG()
         flag.value = flag        
-        res = self.___IHTMLElement._IHTMLElement__com_setAttribute(attr,value,flag)
+        res = self.__IHTMLElement._IHTMLElement__com_setAttribute(attr,value,flag)
         if res == comtypes.hresult.S_OK:
             return True
         else:
             return False        
+
+
+class IHtmlDocumentInterface(object):
+
+    def __init__(self,iHtmlDocument=None) -> None:
+        self.__iHtmlDocument=iHtmlDocument
+
+    @classmethod
+    def from_ie_browser(cls,ie_browser)->"IHtmlDocumentInterface":
+        return cls(iHtmlDocument=ie_browser.iHtmlDocument)
+
+    def query_selector(self,select_str:str,many=False):
+        if not many:
+            return self.__iHtmlDocument.querySelector(select_str)
+        return IHTMLElement(self.__iHtmlDocument.querySelectorAll(select_str))
+
+    def get_element_by_id(self,id:str):
+        return IHTMLElement(self.__iHtmlDocument.getElementById(id))
+
+    def get_elements_by_name(self,name:str):
+        return IHTMLElement(self.__iHtmlDocument.getElementsByName(name))
+
+    def getElementsByTagName(self,tag_name:str):
+        return IHTMLElement(self.__iHtmlDocument.getElementsByTagName(tag_name))
+
+    # def __getattribute__(self, __name: str):
+    #     # print(__name)
+    #     return super().__getattribute__(__name)
+
 
 
 
@@ -389,10 +396,11 @@ if  __name__ == "__main__":
     # ie.open_page(url="https://www.baidu.com",is_new_tab=True)
     print(ie.get_ready_state())
     # ie.open_page(url="www.baidu.com",is_new_tab=False)
-    time.sleep(5)
+    # time.sleep(5)
     # ie.refresh2()
-    # print(ie.iHtmlDocument,type(ie.iHtmlDocument),dir(ie.iHtmlDocument))
+    print(ie.url)
     el = ie.iHtmlDocumentInterface.get_element_by_id("su")
+    print(el.get_attr(attr_name="value"))
     # ie.go_back()
     # time.sleep(5)
     # ie.go_forword()
@@ -400,7 +408,7 @@ if  __name__ == "__main__":
     # ie.go_home()
     # time.sleep(5)
     ie.set_size(1200,900)
-    time.sleep(5)
+    # time.sleep(5)
     # ie.close()
-    time.sleep(10)
+    # time.sleep(10)
 
