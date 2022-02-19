@@ -1,8 +1,26 @@
-
+from datetime import date, datetime,timedelta
+from shutil import which
+from tkinter.font import BOLD
 import comtypes.client,time
 import ctypes,comtypes,comtypes.hresult
 import re
 import uiautomation as uia
+
+
+class ReadyState(object):
+    """ 
+        @https://docs.microsoft.com/en-us/previous-versions//aa768362(v=vs.85)
+    """
+    READYSTATE_UNINITIALIZED = 0
+    READYSTATE_LOADING = 1
+    READYSTATE_LOADED = 2
+    READYSTATE_INTERACTIVE = 3
+    READYSTATE_COMPLETE = 4
+
+    @classmethod
+    def contains(cls,state):
+        return state in [getattr(cls,name) for name in ReadyState.__dict__ if not name.startswith("__")]
+    
 
 def _create_comtype_client(proid:str):
     try:
@@ -14,7 +32,7 @@ def _create_comtype_client(proid:str):
 
 class IWebBrowser2(object):
 
-    def __init__(self,ie_object=None,handle=None,manager=None) -> None:
+    def __init__(self,ie_object=None,handle=None) -> None:
         if not isinstance(ie_object, comtypes.gen.SHDocVw.IWebBrowser2):
             raise TypeError(u'ie_object must be a type of comtypes.gen.SHDocVw.IWebBrowser2')
         self.ie_object = ie_object            
@@ -23,25 +41,27 @@ class IWebBrowser2(object):
         else:
             self.handle = handle
         
-        self.manager = manager
-        manager.register(self)
+        self.manager = IWebBrowerManager.register(self)
+        self.iHtmlDocumentInterface = None
 
     @classmethod
-    def create(cls,handle=None,manager=None)->"IWebBrowser2":
+    def create(cls)->"IWebBrowser2":
         ie_object:comtypes.gen.SHDocVw.IWebBrowser2 = comtypes.client.CreateObject("InternetExplorer.Application") 
-        return cls(ie_object=ie_object,handle=handle,manager=manager)
+        return cls(ie_object=ie_object)
 
     @classmethod
     def from_opening_windows(cls,search_codnition)->"IWebBrowser2":
+        if not IWebBrowerManager.__instance:
+            IWebBrowerManager()
         if isinstance(search_codnition,int):
             try:
-                return single_ie_manager.already_exist_ie_browser_list[search_codnition]
+                return IWebBrowerManager.already_exist_ie_browser_list[search_codnition]
             except IndexError:
-                raise IndexError(f"search_codnition over index:{len(single_ie_manager.already_exist_ie_browser_list)}")
+                raise IndexError(f"search_codnition over index:{len(IWebBrowerManager.already_exist_ie_browser_list)}")
         if isinstance(search_codnition,str) and search_codnition.startswith("http"):
             # get windows by url
             client = None
-            for ie in single_ie_manager.ie_browser_list:
+            for ie in IWebBrowerManager.ie_browser_list:
                 if re.match(search_codnition,ie.url):
                     client =  ie
             if not client:
@@ -96,8 +116,10 @@ class IWebBrowser2(object):
                 comtypes.automation.VARIANT(2048),
                 comtypes.automation.VARIANT(comtypes.automation.VT_EMPTY),
                 comtypes.automation.VARIANT(comtypes.automation.VT_EMPTY),
-                headers)            
-    
+                headers) 
+        self._wait()          
+        self.iHtmlDocumentInterface = IHtmlDocumentInterface.from_ie_browser(self) # todo register interface through event?
+
     def close(self)->bool:
         if self.ie_object._IWebBrowserApp__com_Quit()==comtypes.hresult.S_OK:
             return True
@@ -193,15 +215,136 @@ class IWebBrowser2(object):
         return False      
 
     @property
-    def document(self):
+    def iHtmlDocument(self):
         ## TODO @https://docs.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/aa752541(v=vs.85)?redirectedfrom=MSDN
-        # doc = comtypes.automation.IDispatch()
-        # doc.vt =comtypes.automation.VT_DISPATCH
-        # res = self.ie_object._IWebBrowser__com__get_Document(comtypes.POINTER(doc))
+        # html = comtypes.automation.POINTER(comtypes.automation.IDispatch)()
+        ...
         # if res==comtypes.hresult.S_OK:
-        #     return doc
+        #     return html.value
         # return None    
-        ...  
+    
+    @iHtmlDocument.getter
+    def iHtmlDocument(self):
+        try:
+            return self.ie_object.Document
+        except comtypes.COMError:
+            print("please open a url first!")
+            raise
+    
+    def _wait(self,timeout = 120):
+        """ wait until the page load finish """
+        start = datetime.now()
+        deadline  = start + timedelta(seconds=timeout)
+        while datetime.now() < deadline:
+            if self.get_ready_state() == ReadyState.READYSTATE_COMPLETE:
+                return True
+        raise TimeoutError(f"loading page timeout:{timeout}") # todo close or stop loading page?
+
+
+    # def query_selector(self,select_str:str,many=False):
+    #     if not many:
+    #         return self.iHtmlDocument.querySelector(select_str)
+    #     return self.iHtmlDocument.querySelectorAll(select_str)
+
+    # def get_element_by_id(self,id:str):
+    #     return self.iHtmlDocument.getElementById(id)
+
+     
+    # def get_elements_by_name(self,name:str):
+    #     return self.iHtmlDocument.getElementsByName(name)
+
+    # def getElementsByTagName(self,tag_name:str):
+    #     return self.iHtmlDocument.getElementsByTagName(tag_name)
+
+class IHtmlDocumentInterface(object):
+
+    def __init__(self,iHtmlDocument=None) -> None:
+        self.__iHtmlDocument=iHtmlDocument
+
+    @classmethod
+    def from_ie_browser(cls,ie_browser)->"IHtmlDocumentInterface":
+        return cls(iHtmlDocument=ie_browser.iHtmlDocument)
+
+    def query_selector(self,select_str:str,many=False):
+        if not many:
+            return self.__iHtmlDocument.querySelector(select_str)
+        return self.__iHtmlDocument.querySelectorAll(select_str)
+
+    def get_element_by_id(self,id:str):
+        return self.__iHtmlDocument.getElementById(id)
+
+    def get_elements_by_name(self,name:str):
+        return self.__iHtmlDocument.getElementsByName(name)
+
+    def getElementsByTagName(self,tag_name:str):
+        return self.__iHtmlDocument.getElementsByTagName(tag_name)
+
+    def __getattribute__(self, __name: str):
+        print(__name)
+        return super().__getattribute__(__name)
+
+
+class IHTMLElement(object):
+    
+    def __init__(self,_IHTMLElement) -> None:
+        self.___IHTMLElement = _IHTMLElement # todo support list
+
+    def get_text(self,include_tag = False):
+        """
+        @https://docs.microsoft.com/en-us/previous-versions//hh869989(v=vs.85)?redirectedfrom=MSDN
+        """
+
+        text = comtypes.automation.BSTR()
+        if not include_tag: 
+            res = self.___IHTMLElement._IHTMLElement__com__get_innerText(ctypes.byref(text))
+        else:
+            res = self.___IHTMLElement._IHTMLElement__com__get_outerHTML(ctypes.byref(text))
+        if res == comtypes.hresult.S_OK:
+            return text.value
+        else:
+            return ""
+
+    def set_text(self,value) -> bool:
+        """
+        @https://docs.microsoft.com/en-us/previous-versions//hh869989(v=vs.85)?redirectedfrom=MSDN 
+        """ 
+        text = comtypes.automation.BSTR()
+        text.value = value
+        res = self.___IHTMLElement._IHTMLElement__com__set_innerText(text)
+        if res == comtypes.hresult.S_OK:
+            return True
+        else:
+            return False
+
+    def click(self):
+        return self.___IHTMLElement.click()
+
+    
+    def get_attr(self,attr_name,flag = 0):
+        attr = comtypes.automation.BSTR()
+        attr.value  = attr_name
+        flag = comtypes.automation.LONG()
+        flag.value = flag
+        res = self.___IHTMLElement._IHTMLElement__com_getAttribute(attr,flag)
+        return res
+
+    
+    def set_attr(self,attr_name,value,flag =1)->bool:
+        """
+        @https://docs.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/aa752330(v=vs.85)
+        flag = 1: case sensitive  
+        flag = 0: no case sensitive 
+        """
+        attr = comtypes.automation.BSTR()
+        attr.value  = attr_name
+        value = comtypes.automation.VARIANT(value)
+        flag = comtypes.automation.LONG()
+        flag.value = flag        
+        res = self.___IHTMLElement._IHTMLElement__com_setAttribute(attr,value,flag)
+        if res == comtypes.hresult.S_OK:
+            return True
+        else:
+            return False        
 
 
 
@@ -232,30 +375,32 @@ class IWebBrowerManager(object):
 
     @staticmethod
     def register(ie_browser:IWebBrowser2):
+        if not IWebBrowerManager.__instance: 
+            IWebBrowerManager()
         if ie_browser not in [item.handle for item in  IWebBrowerManager.ie_browser_list]:
             IWebBrowerManager.ie_browser_list.append(IeItem(ie_browser))
 
 
-single_ie_manager = IWebBrowerManager()
-
 
 if  __name__ == "__main__":
-    ie = IWebBrowser2.create(manager=single_ie_manager)
+
+    ie = IWebBrowser2.create()
     ie.open(is_max=True)
+    # ie.open_page(url="https://www.baidu.com",is_new_tab=True)
     print(ie.get_ready_state())
     # ie.open_page(url="www.baidu.com",is_new_tab=False)
     time.sleep(5)
-    print(ie.get_ready_state())
     # ie.refresh2()
-    print(ie.document)
+    # print(ie.iHtmlDocument,type(ie.iHtmlDocument),dir(ie.iHtmlDocument))
+    el = ie.iHtmlDocumentInterface.get_element_by_id("su")
     # ie.go_back()
     # time.sleep(5)
     # ie.go_forword()
     # time.sleep(5)
     # ie.go_home()
     # time.sleep(5)
-    ie.open_page(url="https://www.baidu.com",is_new_tab=True)
     ie.set_size(1200,900)
     time.sleep(5)
     # ie.close()
-    # time.sleep(10)
+    time.sleep(10)
+
