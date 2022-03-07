@@ -184,7 +184,6 @@ class IWebBrowser2(object):
     def open_page(self,url,is_new_tab)->bool:
         return self.open(url=url,is_new_tab=is_new_tab)
 
-    
     def get_ready_state(self)->int:
         """ 
             @https://docs.microsoft.com/en-us/previous-versions//aa752141(v=vs.85)?redirectedfrom=MSDN
@@ -238,8 +237,18 @@ class IWebBrowser2(object):
         while datetime.now() < deadline:
             if self.get_ready_state() == ReadyState.READYSTATE_COMPLETE:
                 return True
+            else:
+                time.sleep(0.5)
         raise TimeoutError(f"loading page timeout:{timeout}") # todo close or stop loading page?
 
+    def click_by_css(self,count = 1,type = "left"):
+        ...
+
+    def get_text_by_css(self):
+        ...
+
+    def set_text_by_css(self,value):
+        ...
 
     # def query_selector(self,select_str:str,many=False):
     #     if not many:
@@ -335,8 +344,9 @@ class IHtmlDocumentInterface(object):
         return cls(iHtmlDocument=ie_browser.iHtmlDocument)
 
     def query_selector(self,select_str:str,many=False):
+        assert select_str !="" ,"查询字符串不能为空！"
         if not many:
-            return self.__iHtmlDocument.querySelector(select_str)
+            return IHTMLElement(self.__iHtmlDocument.querySelector(select_str))
         return IHTMLElement(self.__iHtmlDocument.querySelectorAll(select_str))
 
     def get_element_by_id(self,id:str):
@@ -345,15 +355,17 @@ class IHtmlDocumentInterface(object):
     def get_elements_by_name(self,name:str):
         return IHTMLElement(self.__iHtmlDocument.getElementsByName(name))
 
-    def getElementsByTagName(self,tag_name:str):
-        return IHTMLElement(self.__iHtmlDocument.getElementsByTagName(tag_name))
+    def get_elements_by_tag_name(self,tag_name:str):
+        return self.__iHtmlDocument.getElementsByTagName(tag_name)
+
+    def __get_all_iframes(self):
+        return self.get_elements_by_tag_name("iframe")   
+    iframe_list = property(__get_all_iframes) 
+    
 
     # def __getattribute__(self, __name: str):
     #     # print(__name)
     #     return super().__getattribute__(__name)
-
-
-
 
 class IeItem(object):
     def __init__(self,ie_object:IWebBrowser2) -> None:
@@ -392,23 +404,32 @@ class IWebBrowerManager(object):
 if  __name__ == "__main__":
 
     ie = IWebBrowser2.create()
-    ie.open(is_max=True)
+    ie.open(is_max=True,url=f"https://www.jb51.net/web/58424.html")
     # ie.open_page(url="https://www.baidu.com",is_new_tab=True)
-    print(ie.get_ready_state())
-    # ie.open_page(url="www.baidu.com",is_new_tab=False)
+    # time.sleep(1)
+    # print(ie.get_ready_state())
+    # ie.open_page(url="www.baidu.com",is_new_tab=True)
     # time.sleep(5)
     # ie.refresh2()
-    print(ie.url)
-    el = ie.iHtmlDocumentInterface.get_element_by_id("su")
-    print(el.get_attr(attr_name="value"))
+    # print(ie.url)
+    # el = ie.iHtmlDocumentInterface.get_element_by_id("su")
+    # print(el.get_attr(attr_name="value"))
+    # el2 = ie.iHtmlDocumentInterface.query_selector("#kw")
+    # print(el2)
+    # print(el2.set_text(value="sendi"))
+    # button = ie.iHtmlDocumentInterface.query_selector()
+    # button.click()
     # ie.go_back()
     # time.sleep(5)
     # ie.go_forword()
     # time.sleep(5)
     # ie.go_home()
-    # time.sleep(5)
-    ie.set_size(1200,900)
-    # time.sleep(5)
-    # ie.close()
-    # time.sleep(10)
+    time.sleep(2)
+    el3 = ie.iHtmlDocumentInterface.iframe_list
+    print(el3)
+    for el in el3:
+        print(dir(el))
+        break
 
+    time.sleep(5)
+    ie.close()
